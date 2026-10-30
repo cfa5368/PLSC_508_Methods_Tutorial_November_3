@@ -1,0 +1,686 @@
+---
+title: "PLSC 508 — Liking, Reciprocity, and Multiplicative Effects"
+subtitle: "A classroom application of additive and multiplicative effects models"
+author: "Carlos Freitas Almeida"
+date: "November 3, 2026"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    self_contained: true
+    mathjax: null
+    code_folding: show
+---
+
+```{r formatting, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = FALSE, warning = TRUE,
+  message = TRUE, error = FALSE, fig.width = 8, fig.height = 5)
+```
+
+# Background: cohesion and behavior in school classrooms
+
+Van den Bos, Crone, Meuwese, and Güroğlu (2018) asked how adolescents' network
+positions and classroom cohesion relate to peer-reported social behavior and
+generalized trust. They recruited 611 students from 22 classes in one Dutch
+secondary school, with a mean age of 14.8 years. They report excluding two
+mixed classes whose membership changed over time, leaving 496 participants
+(article, pp. 3 and 10).
+
+Students nominated classmates they liked most, without a fixed nomination limit
+and without self-nominations. Other questions measured helping, cooperation,
+aggression, victimization, and perceived popularity. An economic game measured
+trust in unfamiliar others. The authors used **mutual liking**: an undirected
+edge existed only when both students nominated one another (pp. 3 and 10–11;
+S2 Text, item 1).
+
+The authors measured cohesion with mutual-network density, diameter, and
+clusters. Denser mutual networks were associated with less antisocial behavior;
+larger classes with more antisocial behavior. Fewer clusters and shorter
+diameter were associated with greater generalized trust (pp. 5–6). At the
+individual level, eigenvector centrality was associated with more prosocial
+behavior and relational aggression and less victimization; no individual
+centrality measure was associated with trust (pp. 7–8; Table 3 and S4).
+The cross-sectional design does not identify causation (p. 9).
+
+[Despite the title's wording, the authors describe the direct classroom-cohesion
+association with prosocial behavior as a trend in the discussion (p. 9). I do
+not present that as an established causal effect.]
+
+**My application keeps the directions.** I use all sixteen released students in
+archive group 36 to distinguish sending nominations, receiving nominations,
+and residual reciprocity. I model neither helping nor trust, and I am not
+replicating the paper's cross-classroom behavioral regressions.
+
+[**Question:** How are liking nominations associated with matching recorded sex
+and age differences, and what changes when I add multiplicative structure beyond
+actor tendencies and residual reciprocity? By the end, I want to be able to
+construct aligned network inputs, explain the two model calls, and interpret
+results together with their diagnostics.]
+
+# Setup and network construction
+
+Open `W11_Dutch_Classroom.Rproj` after extracting the complete folder. Install
+missing packages **before** class. This document runs two rank-zero chains; it
+loads two rank-two chains estimated beforehand. The separate script
+`scripts/estimate_rank2_before_class.R` contains the rank-two reproduction calls.
+There are no automatic downloads, package installations, or substitutions for
+missing fit files.
+
+```{r setup}
+# [I check packages without installing or upgrading anything during the lesson.]
+required <- c("amen", "igraph", "posterior", "knitr")
+missing <- required[!vapply(required, requireNamespace, logical(1), quietly = TRUE)]
+if (length(missing)) stop(paste("I need these packages before class:", paste(missing, collapse = ", ")))
+library(amen)
+
+# [These relative paths work from the extracted project, not an isolated Rmd.]
+manifest <- read.csv("DATA_MANIFEST.csv", stringsAsFactors = FALSE)
+stopifnot(all(file.exists(manifest$file)))
+if (!identical(unname(tools::md5sum(manifest$file)), manifest$md5)) {
+  stop("A supplied input differs from its recorded copy. I restore the original input rather than alter its fingerprint.")
+}
+reference <- readRDS("data/input_reference.rds")
+nom <- read.csv("data/group36_like_nominations.csv", colClasses = "character", check.names = FALSE)
+actors <- read.csv("data/group36_attributes.csv", colClasses = "character", check.names = FALSE)
+ids <- nom$PPN
+actors <- actors[match(ids, actors$node_id), , drop = FALSE]
+stopifnot(identical(ids, actors$node_id), !anyDuplicated(ids), length(ids) == 16L)
+sex <- as.integer(actors$sex)
+age <- as.numeric(actors$age)
+stopifnot(all(sex %in% 0:1), all(is.finite(age)))
+nom[1:3, c("PPN", "group", "Q", "nomination1", "nomination2")]
+```
+
+[The recorded render warned that `amen` was built under R 4.6.1 while this
+session used R 4.6.0. That warning did not stop this run. It is not a guarantee
+of compatibility on every computer; I retain warnings and complete the preflight rather than suppress them or require everyone to upgrade.]
+
+The archive calls the field `sex`; the article's Table 3 note (p. 7) and S4 Table
+provide the published key `0 = female`, `1 = male`. I use that documentary key
+for the plots, not behavioral differences as evidence of coding.
+[Matching recorded codes is unchanged by reversing their labels. These two
+categories are not an exhaustive measure of gender.]
+
+The codebook maps `9999` to `NA`. In group 36, those entries occur after each
+student's nonempty list, so I treat them as unused slots. I do not infer that a
+fully empty response elsewhere means observed zero nominations. One original
+list repeats `1042 -> 1046`; I keep the raw entries and count that ordered
+relationship once.
+
+```{r construct-network}
+# [Rows send and columns receive; unique() gives a binary nomination per pair.]
+Y <- matrix(0L, length(ids), length(ids), dimnames = list(ids, ids))
+listed_slots <- 0L
+for (i in seq_along(ids)) {
+  targets <- unname(unlist(nom[i, paste0("nomination", 1:30)], use.names = FALSE))
+  targets <- targets[targets != "9999"]
+  stopifnot(length(targets) > 0L, all(targets %in% ids), !any(targets == ids[i]))
+  listed_slots <- listed_slots + length(targets)
+  Y[i, match(unique(targets), ids)] <- 1L
+}
+diag(Y) <- NA_integer_  # [Self-pairs do not enter the likelihood.]
+stopifnot(identical(Y, reference$Y), listed_slots == 97L)
+
+# [A has a zero diagonal for graph calculations; Y keeps its excluded diagonal.]
+A <- Y
+diag(A) <- 0L
+g <- igraph::graph_from_adjacency_matrix(A, mode = "directed", weighted = NULL, diag = FALSE)
+stopifnot(identical(igraph::V(g)$name, ids))
+```
+
+[The released roster is complete for the selected inputs, not independently
+verified against an enrollment census. I selected this group for response and
+attribute completeness before fitting, not for coefficients or model fit.]
+
+# Describe and visualize the network
+
+## Size, reciprocity, and transitivity
+
+[An actor is a student. A dyad is a pair of students; this directed matrix has
+240 ordered non-self entries within 120 unordered student pairs. `Y[i, j]`
+records whether student i nominates student j. Out-degree counts nominations
+sent; in-degree counts nominations received. Directed density divides ties by
+n(n - 1), while mutual undirected density divides edges by n(n - 1)/2.
+Reciprocity is the fraction of directed nominations with a reverse nomination.
+Directed transitivity here is the fraction of distinct-student two-paths
+`i -> j -> k` with `i -> k`. I state the denominator rather than treating
+all transitivity definitions as equivalent (`igraph` documentation).]
+
+```{r descriptive-statistics}
+n_students <- igraph::vcount(g)
+n_ties <- igraph::ecount(g)
+out_degree <- igraph::degree(g, mode = "out", loops = FALSE)
+in_degree <- igraph::degree(g, mode = "in", loops = FALSE)
+reciprocated_fraction <- igraph::reciprocity(g, ignore.loops = TRUE, mode = "default")
+
+# [A %*% A counts directed two-paths. Removing its diagonal keeps i different from k.]
+two_paths <- A %*% A
+diag(two_paths) <- 0
+n_two_paths <- sum(two_paths)
+n_closed_paths <- sum(two_paths * A)
+directed_transitivity <- n_closed_paths / n_two_paths
+
+# [This separate undirected graph follows the paper's mutual-tie rule.]
+M <- A * t(A)
+g_mutual <- igraph::graph_from_adjacency_matrix(M, mode = "undirected", weighted = NULL, diag = FALSE)
+mutual_pairs <- igraph::ecount(g_mutual)
+mutual_density <- igraph::edge_density(g_mutual, loops = FALSE)
+mutual_transitivity <- igraph::transitivity(g_mutual, type = "global")
+descriptives <- data.frame(
+  measure = c("Students", "Directed ties", "Directed density", "Reciprocated fraction of ties",
+              "Directed transitivity: closed two-path fraction", "Mutual undirected edges",
+              "Mutual-network density", "Mutual-network global transitivity"),
+  value = c(n_students, n_ties, igraph::edge_density(g, loops = FALSE), reciprocated_fraction,
+            directed_transitivity, mutual_pairs, mutual_density, mutual_transitivity))
+knitr::kable(descriptives, digits = 3, row.names = FALSE)
+```
+
+[There are `r n_ties` directed nominations and `r mutual_pairs` mutual pairs.
+Thus `r 2 * mutual_pairs` of the `r n_ties` nominations are reciprocated:
+`r round(100 * reciprocated_fraction, 1)`%. Of `r n_two_paths` directed two-paths,
+`r n_closed_paths` are transitively closed. Neither number is the model's residual
+`rho`. The mutual graph's density is lower because it excludes one-way liking.]
+
+For `g_mutual`, global transitivity is **three times the number of triangles
+divided by the number of connected triples**, where a triple has two mutual
+edges sharing a student (`igraph::transitivity`). It is not AME's centered,
+standardized `trans.dep`, which appears later.
+
+## Degree distributions
+
+```{r outdegree-distribution, fig.alt="Distribution of outgoing liking nominations among all sixteen students."}
+barplot(table(factor(out_degree, levels = 0:(n_students - 1))),
+  xlab = "Outgoing nominations", ylab = "Number of students", main = "Sending activity")
+```
+
+[Outgoing degree counts how many classmates each student nominates; it is not a
+measure of helpfulness.]
+
+```{r indegree-distribution, fig.alt="Distribution of incoming liking nominations among all sixteen students."}
+barplot(table(factor(in_degree, levels = 0:(n_students - 1))),
+  xlab = "Incoming nominations", ylab = "Number of students", main = "Receiving nominations")
+```
+
+[Incoming degree counts how often a student is nominated. One student receives
+no nominations but sends nine, so that student is not an isolate. This is liking
+popularity, not the study's separately measured perceived-popularity item.]
+
+## Sociogram
+
+```{r sociogram, fig.height=7, fig.alt="All sixteen students and 96 directed liking nominations. Circles and squares repeat the recorded sex coding shown by the colors; the key sits below the network."}
+# [I keep the layout seed and algorithm. Only the display and its key change.]
+sex_colors <- c("#56B4E9", "#E69F00")
+sex_shapes <- c("circle", "square")
+node_colors <- sex_colors[sex + 1L]
+key_text <- c("Code 0: female (published key)", "Code 1: male (published key)")
+set.seed(50836)
+layout_xy <- igraph::layout_with_fr(g)
+old_par <- par(mar = c(.5, .5, 2.5, .5))
+# [Rescaled nodes occupy -1 to 1; the lower strip is reserved for the key.]
+plot(g, layout = layout_xy, rescale = TRUE, ylim = c(-1.65, 1.1),
+     vertex.color = node_colors, vertex.shape = sex_shapes[sex + 1L],
+     vertex.size = 16, vertex.label = ids, vertex.label.family = "sans",
+     vertex.label.cex = .8, vertex.label.color = "black",
+     edge.arrow.size = .4, edge.curved = .12, edge.color = "grey50",
+     main = "Who nominates whom in archive group 36?")
+legend(x = 0, y = -1.32, xjust = .5, yjust = .5, legend = key_text,
+       pch = c(21, 22), pt.bg = sex_colors, pt.cex = 1.4, bty = "n", cex = .8)
+par(old_par)
+```
+
+[Arrows preserve all 96 nominations. Layout positions are a visual arrangement,
+not a measured social distance or fitted latent space. Color and shape show
+recorded categories; apparent grouping does not establish a causal preference.]
+
+# Model the nominations in steps
+
+## Step 1: Define the predictors and model
+
+```{r predictors}
+Xdyad <- array(0, dim = c(length(ids), length(ids), 2L),
+  dimnames = list(ids, ids, c("same_recorded_sex", "age_absdiff_years")))
+Xdyad[, , "same_recorded_sex"] <- 1 * outer(sex, sex, "==")
+Xdyad[, , "age_absdiff_years"] <- abs(outer(age, age, "-"))
+stopifnot(identical(Xdyad, reference$Xdyad))
+dim(Xdyad)
+```
+
+[The first layer compares recorded categories; the second measures age difference
+in years. Row and column order is identical to `Y`. `Xrow = NULL` and `Xcol = NULL`
+omit measured sender/receiver predictors, not their latent random effects.]
+
+For a binary probit model, `Y[i,j] = 1` when the latent propensity is positive:
+
+**z<sub>ij</sub> = β<sub>0</sub> + β<sub>s</sub>same<sub>ij</sub> + β<sub>a</sub>|age<sub>i</sub> − age<sub>j</sub>| + a<sub>i</sub> + b<sub>j</sub> + u<sub>i</sub><sup>T</sup>v<sub>j</sub> + ε<sub>ij</sub>.**
+
+| Component | Meaning in this classroom | Code/result |
+|:--|:--|:--|
+| Measured coefficients | Conditional association with matching sex code and age difference | `Xdyad`, `BETA` |
+| Sender effect | Residual tendency to nominate classmates | `rvar`, `APM`, variance `va` |
+| Receiver effect | Residual tendency to receive nominations | `cvar`, `BPM`, variance `vb` |
+| Sender–receiver covariance | Association between the same student's two tendencies | `cab` |
+| Residual reciprocity | Correlation between opposite-direction latent errors within a pair | `dcor`, `rho` |
+| Multiplicative contribution | Higher-order patterns beyond the predictors and additive/dyadic terms | `R`, `U`, `V`, `UVPM` |
+
+INA §10.5 calls AME a latent-factor model. Week 10 introduced Euclidean distance
+(slide 4) and a bilinear inner-product representation (slides 20–21). These calls
+use separate sender/receiver vectors, not a Euclidean-distance term. Additive
+and dyadic components represent actor heterogeneity and reciprocity; multiplicative
+effects can represent higher-order patterns (Dorff et al., 2020, pp. 484–485;
+Minhas et al., 2019; Hoff, 2021).
+
+[The readings may place a diagonal scaling matrix between factors; the installed
+directed implementation computes `U %*% t(V)`. That scaling can be absorbed
+algebraically into unrestricted vectors without establishing identical priors.
+`R = 0` removes only the multiplicative part. `R = 2` can represent shared-partner
+and triadic patterns but does not guarantee transitivity or identify a trait.
+`R` is the multiplicative dimension, not a distance dimension or mixture-group
+count. The residual variance is fixed at one for probit identification. Given
+model parameters and latent effects, different unordered residual pairs are
+independent, but opposite directions within a pair may correlate through `rho`.
+`prior = list()` retains the package's default, data-calibrated priors.]
+
+## Step 2: Fit two rank-zero chains live
+
+[These calls run both when I execute the chunk and when I knit the lesson.
+In the October 29 run they took 108.63 and 105.84 seconds, about 3.57 minutes
+combined; the table prints the times for the current run. Other computers may
+differ. A chain is a sequence of simulated parameter values. I discard the
+first 10,000 iterations (`burn`), run 50,000 more (`nscan`), and retain every
+25th (`odens`): 2,000 saved draws per chain. Saving less often does not make
+those draws independent. I keep the checked settings (`amen::ame`, version 1.4.5).]
+
+```{r fit-rank-zero}
+RNGkind("Mersenne-Twister", "Inversion", "Rejection")
+seeds0 <- c(50836101L, 50836102L)
+r0_execution <- "estimated_in_this_session"
+R0 <- vector("list", 2L)
+runtime0 <- numeric(2L)
+for (j in seq_along(seeds0)) {
+  cat("I fit rank-zero chain", j, "with seed", seeds0[j], "\n")
+  runtime0[j] <- system.time({
+    R0[[j]] <- amen::ame(
+      Y = Y, Xdyad = Xdyad, Xrow = NULL, Xcol = NULL,
+      family = "bin", R = 0, rvar = TRUE, cvar = TRUE, dcor = TRUE,
+      intercept = TRUE, symmetric = FALSE, prior = list(),
+      seed = seeds0[j], burn = 10000, nscan = 50000, odens = 25,
+      plot = FALSE, print = FALSE, gof = TRUE
+    )
+  })[["elapsed"]]
+}
+data.frame(chain = 1:2, seed = seeds0, seconds = runtime0,
+           retained = vapply(R0, function(f) nrow(f$BETA), integer(1)))
+```
+
+[These two chains estimate the same model with different random-number seeds.
+They are not two different classrooms. The package uses data-based starts;
+different seeds are not deliberately dispersed starting values. A chain count
+alone does not establish adequate sampling.]
+
+## Step 3: Load two rank-two chains estimated beforehand
+
+```{r load-rank-two-estimated-beforehand}
+# [These fits already exist. This chunk does not run rank-two estimation.]
+preestimated <- readRDS("data/rank2_preestimated.rds")
+stopifnot(identical(preestimated$inputs$Y, Y),
+          identical(preestimated$inputs$Xdyad, Xdyad), length(preestimated$fits) == 2L)
+R2 <- preestimated$fits
+stopifnot(all(vapply(R2, function(f) nrow(f$BETA), integer(1)) == 8000L))
+data.frame(chain = 1:2, seed = preestimated$seeds,
+           retained = vapply(R2, function(f) nrow(f$BETA), integer(1)))
+```
+
+I use the first two numbered chains from the longer rank-two run, not a pair
+chosen for attractive results. Each used 10,000 burn-in iterations and 200,000
+later iterations, saving every 25th. The four-chain background checks remain
+in my authoring records; every table below uses **two chains per model**. The
+rank-zero and rank-two budgets differ, but their data and model components other
+than multiplicative rank are the same.
+
+## Step 4: Check sampling and summarize the estimates
+
+```{r summarize-two-chains}
+# [Each column of x is a chain; I do not concatenate chains before calculating R-hat.]
+summarize_model <- function(fits, model) {
+  parameters <- c(colnames(fits[[1]]$BETA), "va", "vb", "cab", "rho")
+  rows <- lapply(parameters, function(p) {
+    x <- sapply(fits, function(f) {
+      if (p %in% colnames(f$BETA)) f$BETA[, p] else f$VC[, p]
+    })
+    data.frame(model = model, parameter = p, mean = mean(x),
+      lower = unname(quantile(x, .025)), upper = unname(quantile(x, .975)),
+      rhat = posterior::rhat(x), bulk_ess = posterior::ess_bulk(x),
+      tail_ess = posterior::ess_tail(x), mcse_over_sd = posterior::mcse_mean(x) / sd(c(x)))
+  })
+  do.call(rbind, rows)
+}
+summary_table <- rbind(summarize_model(R0, "R = 0"), summarize_model(R2, "R = 2"))
+stopifnot(all(vapply(c(R0, R2), function(f) all(f$VC[, "ve"] == 1), logical(1))))
+knitr::kable(summary_table[, c("model", "parameter", "rhat", "bulk_ess", "tail_ess", "mcse_over_sd")],
+             digits = c(0, 0, 4, 0, 0, 3), row.names = FALSE)
+flag <- with(summary_table, !is.finite(rhat) | rhat >= 1.01 | bulk_ess < 400 |
+                              tail_ess < 400 | mcse_over_sd > .05)
+if (any(flag)) warning("I inspect the flagged summaries; I do not change the pair or discard a chain.")
+```
+
+[R-hat compares split-chain behavior using rank-normalized and folded versions;
+values near one are reassuring but not proof of convergence. Bulk ESS concerns
+central sampling efficiency, and tail ESS concerns the 5% and 95% quantiles.
+These effective sample sizes describe simulation information, not student counts.
+`mcse_over_sd` divides the Monte Carlo standard error of a posterior **mean** by
+posterior SD; it is not uncertainty in the parameter or MCSE of interval endpoints
+(Vehtari et al., 2021; `posterior` documentation). Two chains permit these checks;
+I still inspect traces. `ve` is excluded only after verifying that it is fixed
+at one.]
+
+
+```{r coefficients}
+coefficient_rows <- summary_table$parameter %in% colnames(R0[[1]]$BETA)
+knitr::kable(summary_table[coefficient_rows, c("model", "parameter", "mean", "lower", "upper")],
+             digits = 3, row.names = FALSE, caption = "Probit coefficients and central 95% credible intervals")
+# [This small lookup keeps the narrative tied to the actual results above.]
+value <- function(model, parameter, column = "mean") {
+  summary_table[summary_table$model == model & summary_table$parameter == parameter, column]
+}
+interval_text <- function(model, parameter) {
+  paste0("[", sprintf("%.3f", value(model, parameter, "lower")), ", ",
+         sprintf("%.3f", value(model, parameter, "upper")), "]")
+}
+```
+
+[A central 95% credible interval contains the middle 95% of saved parameter
+values, approximating posterior uncertainty under the model and data. The
+matching-sex coefficients are
+`r sprintf("%.3f", value("R = 0", "same_recorded_sex.dyad"))` and
+`r sprintf("%.3f", value("R = 2", "same_recorded_sex.dyad"))`, with intervals
+`r interval_text("R = 0", "same_recorded_sex.dyad")` and
+`r interval_text("R = 2", "same_recorded_sex.dyad")`. Matching recorded categories
+are associated with greater latent nomination propensity conditional on each
+model. This is not a probability-point change or proof of a preference.]
+
+[The age-difference estimates are
+`r sprintf("%.3f", value("R = 0", "age_absdiff_years.dyad"))` and
+`r sprintf("%.3f", value("R = 2", "age_absdiff_years.dyad"))` per year of difference,
+with intervals `r interval_text("R = 0", "age_absdiff_years.dyad")` and
+`r interval_text("R = 2", "age_absdiff_years.dyad")`. They include zero, not proof
+that age never matters. Observed differences range only from 0 to
+`r sprintf("%.2f", max(Xdyad[, , "age_absdiff_years"]))` years. Both models fix the
+probit residual variance at one, but condition on different latent structures.
+The larger R2 coefficient is not automatically a doubled probability effect
+or a known rescaling. I do not exponentiate probit coefficients as odds ratios.]
+
+```{r activity-popularity-reciprocity}
+variance_rows <- summary_table$parameter %in% c("va", "vb", "cab", "rho")
+knitr::kable(summary_table[variance_rows, c("model", "parameter", "mean", "lower", "upper")],
+             digits = 3, row.names = FALSE, caption = "Sender/receiver components and residual reciprocity")
+```
+
+[**Activity and popularity:** A random effect is a student-specific latent
+sending or receiving deviation modeled through a shared distribution.
+`va` and `vb` describe heterogeneity in those tendencies after the other terms.
+For R2 their means are `r sprintf("%.3f", value("R = 2", "va"))` and
+`r sprintf("%.3f", value("R = 2", "vb"))`. The larger receiving mean suggests
+more remaining variation in being nominated, but comparing means is not a
+posterior comparison of the variances. These are not observed degree variances.
+The prior supports positive variances, so an interval excluding zero is not by
+itself a test that heterogeneity is present.]
+
+[**Covariance:** `cab` concerns the same student's sending and receiving
+latent deviations. The R0 interval is `r interval_text("R = 0", "cab")` and the
+R2 interval is `r interval_text("R = 2", "cab")`. Negative covariance indicates
+opposite residual sending/receiving tendencies under the model, not a personal
+trait or a causal effect. It is not bounded by -1 and 1; standardizing each saved
+`cab` by `sqrt(va * vb)` would give the corresponding actor correlation.]
+
+[**Residual reciprocity:** `rho` is the conditional correlation of opposite-direction
+latent errors, not the observed reciprocated-tie share. The R0 interval is
+`r interval_text("R = 0", "rho")`; the R2 interval is
+`r interval_text("R = 2", "rho")`. R2 is broad, asymmetric, and includes zero;
+its positive mean alone is not a precise finding about residual reciprocity.
+The update caps `abs(rho)` at 0.995. In the two saved R2 chains, 78 of 16,000
+retained values equal +0.995 (about 0.49%). Those are saved-state counts, not
+acceptance rates. They document boundary behavior but do not identify the
+uncapped posterior or prove that the boundary explains the uncertainty.]
+
+## Step 5: Visualize the multiplicative effects
+
+[Each row of `U` is a sending profile and each row of `V` a receiving profile.
+I show the **first numbered R2 chain**. The returned matrices form an SVD-based
+rank-two approximation to its mean product `UVPM`, not complete factor-draw
+histories. I do not average unaligned coordinates across chains or identify
+an arbitrary axis with a measured student trait.]
+
+```{r sending-factors, fig.alt="Sending profiles from the first numbered R2 chain. Colors and shapes identify recorded sex codes; Factor 2 uses an expanded display scale, and the same coordinate limits are used for V."}
+U <- R2[[1]]$U
+V <- R2[[1]]$V
+stopifnot(ncol(U) == 2L, ncol(V) == 2L,
+          identical(rownames(U), ids), identical(rownames(V), ids))
+xlim <- grDevices::extendrange(c(U[, 1], V[, 1]), f = .12)
+ylim <- grDevices::extendrange(c(U[, 2], V[, 2]), f = .18)
+sex_pch <- c(21, 22)[sex + 1L]
+# [Only text placement changes; I do not move the fitted coordinates.]
+u_label_pos <- setNames(rep(3, length(ids)), ids)
+u_label_pos["1038"] <- 4
+plot(U[, 1], U[, 2], pch = sex_pch, bg = node_colors, cex = 1.4,
+     xlim = xlim, ylim = ylim, xlab = "Factor 1",
+     ylab = "Factor 2 (expanded display scale)", main = "U: sending profiles (R2 chain 1)")
+abline(h = 0, v = 0, lty = 3)
+text(U[, 1], U[, 2], labels = ids, pos = u_label_pos, cex = .75)
+legend("bottomleft", legend = key_text, pch = c(21, 22), pt.bg = sex_colors,
+       bty = "n", cex = .75)
+```
+
+[The contribution in this rank-two display is the **sum**
+u<sub>i1</sub>v<sub>j1</sub> + u<sub>i2</sub>v<sub>j2</sub>.
+Same signs make the first product positive; opposite signs make it negative.
+The second product can reverse the total, especially near zero on Factor 1.
+The sender–receiver contribution is not their Euclidean distance.]
+
+```{r receiving-factors, fig.alt="Receiving profiles from the same R2 chain, with the same scales and color-and-shape key as U. Only crowded text labels are repositioned."}
+v_label_pos <- setNames(rep(3, length(ids)), ids)
+v_label_pos[c("1036", "1041")] <- 1
+v_label_pos["1042"] <- 4
+plot(V[, 1], V[, 2], pch = sex_pch, bg = node_colors, cex = 1.4,
+     xlim = xlim, ylim = ylim, xlab = "Factor 1",
+     ylab = "Factor 2 (expanded display scale)", main = "V: receiving profiles (R2 chain 1)")
+abline(h = 0, v = 0, lty = 3)
+text(V[, 1], V[, 2], labels = ids, pos = v_label_pos, cex = .75)
+legend("bottomleft", legend = key_text, pch = c(21, 22), pt.bg = sex_colors,
+       bty = "n", cex = .75)
+```
+
+[In this chain's **mean-product summary**, the first singular value is about
+28.93 and the second about 0.69. Factor 2 is displayed with an expanded scale
+so it is visible; this is not evidence that the fitted rank-two model is really
+rank one. Averaging rank-two products can produce a matrix of higher rank, so
+the displayed product is only an approximation to `UVPM`. Both recorded codes
+appear on each side of Factor 1; that does not establish independence from sex
+or identify the factors as sex. The sociogram and these plots represent different
+objects, and none of these axes establishes an individual trait or mechanism.]
+
+## Step 6: Check all five network features
+
+The default `amen` plot shows parameter traces and five predictive histograms.
+I retain the unchanged package method and show the first numbered chain of each
+model; the numerical table uses both chains. These single-chain panels do not
+replace the two-chain diagnostics.
+
+[Trace colors distinguish **parameters within one chain**, not different chains.
+The VC panel follows `va`, `cab`, `vb`, `rho`, `ve`; the BETA panel follows the
+intercept, matching-code coefficient, and age-difference coefficient. Colored
+horizontal lines mark that chain's parameter medians. The gray zero line is in
+the BETA panel. In each histogram the red vertical line is the observed statistic;
+the bars describe saved replicated-network statistics and use a density scale
+with omitted vertical-axis ticks (`amen::plot.ame`, version 1.4.5).]
+
+```{r default-ame-r0, fig.width=8, fig.height=7.5, out.width="100%", dev.args=list(pointsize=14), fig.alt="Default amen plot for R0 chain 1, with parameter traces and all five predictive statistics. Each histogram marks the observed network with a red vertical line."}
+plot(R0[[1]])
+```
+
+[For each histogram, locate the observed line and compare it with the whole
+replicated distribution, not only with its center.]
+
+```{r default-ame-r2, fig.width=8, fig.height=7.5, out.width="100%", dev.args=list(pointsize=14), fig.alt="Default amen plot for R2 chain 1, using the same five predictive statistics and observed references as the R0 plot."}
+plot(R2[[1]])
+```
+
+| GOF label | Network feature |
+|:--|:--|
+| `sd.rowmean` | Standard deviation of outgoing nomination rates across students |
+| `sd.colmean` | Standard deviation of incoming nomination rates across students |
+| `dyad.dep` | Observed opposite-direction association; not residual `rho` |
+| `cycle.dep` | Centered, standardized directed-cycle dependence |
+| `trans.dep` | Centered, standardized transitive dependence; not the descriptive closure ratio |
+
+[The central 95% **predictive interval** contains the middle 95% of a statistic
+across the saved replicated networks. It concerns replicated data, whereas a
+credible interval concerns a parameter. The installed implementation returns
+five GOF statistics even though the brief help description mentions four.]
+
+```{r all-five-gof-table}
+predictive_table <- function(fits, label) {
+  observed <- fits[[1]]$GOF[1, ]
+  stopifnot(isTRUE(all.equal(observed, fits[[2]]$GOF[1, ])))
+  # [Row 1 is observed; I exclude it from all replicated-draw calculations.]
+  draws <- do.call(rbind, lapply(fits, function(f) f$GOF[-1, , drop = FALSE]))
+  intervals <- apply(draws, 2, quantile, probs = c(.025, .975))
+  share <- colMeans(sweep(draws, 2, observed, ">="))
+  data.frame(model = label, statistic = names(observed), observed = unname(observed),
+    replicated_mean = colMeans(draws), lower = intervals[1, ], upper = intervals[2, ],
+    rep_ge_obs = unname(share), row.names = NULL)
+}
+gof_table <- rbind(predictive_table(R0, "R = 0"), predictive_table(R2, "R = 2"))
+knitr::kable(gof_table, digits = 3, row.names = FALSE,
+  caption = "Both chains: observed values, replicated means, central 95% intervals, and replicated shares at least as large as observed")
+gof_value <- function(model, statistic, column) {
+  gof_table[gof_table$model == model & gof_table$statistic == statistic, column]
+}
+```
+
+[`rep_ge_obs` is the share of saved replicated statistics at least as large as
+the observed value. For `trans.dep`, these shares are
+`r sprintf("%.1f", 100 * gof_value("R = 0", "trans.dep", "rep_ge_obs"))`% under R0
+and `r sprintf("%.1f", 100 * gof_value("R = 2", "trans.dep", "rep_ge_obs"))`% under R2.
+R2's replicated means are also closer for outgoing-rate variation, dyadic
+association, and cycle dependence. R0's mean is slightly closer for incoming-rate
+variation. All five observations fall inside both central intervals, but that
+alone does not establish adequate fit. These are selected, in-sample checks,
+not frequentist significance tests, held-out accuracy, an optimal-rank test,
+or causal evidence. The same-sex and age predictors and latent structure can
+all contribute to replicated network patterns.]
+
+# Connect the results to classroom cohesion
+
+The paper represents cohesion using mutual-network density, diameter, and
+clusters (p. 3). My directed graph retains one-way reports as well:
+`r 2 * mutual_pairs` of its `r n_ties` nominations belong to `r mutual_pairs`
+mutual pairs. Applying the paper's mutual rule gives density
+`r sprintf("%.3f", mutual_density)` rather than
+`r sprintf("%.3f", igraph::edge_density(g, loops = FALSE))`, and global
+transitivity `r sprintf("%.3f", mutual_transitivity)`.
+
+[Student 1040 sends `r out_degree["1040"]` nominations and receives
+`r in_degree["1040"]`. That student remains in both graphs but is an isolate
+only in the mutual graph. The mutual construction removes the nine one-way
+nominations; the directed model retains them as observations. They are not
+attributable to the sender effect alone.]
+
+[**Developmental connection:** Directed and mutual measures reveal different
+aspects of adolescents' relational opportunities. These liking reports do not
+establish whether student 1040 lacks support, resources, or relationships outside
+this classroom. Reciprocated and closed patterns are consistent with local
+cohesion, but do not establish uniform cohesion or a causal effect on cooperation.
+This application models neither prosocial behavior nor trust.]
+
+# Try it yourself
+
+[**Two-minute exercise:** Choose one item below; do not fit another model. The
+remaining items are practice after the presentation.]
+
+1. Calculate the density of `g_mutual` and explain why it differs from directed
+   density even though the student roster is unchanged.
+2. Find the rank-two age-difference and `rho` intervals. Write one sentence that
+   respects the uncertainty in each.
+3. From `gof_table`, identify one feature whose replicated mean is closer to the observation under each model. Explain why that is not a causal conclusion.
+
+```{r try-it-yourself}
+# [I type my answer below. These hints are comments, not executed answers.]
+# [1. Apply igraph::edge_density() to g_mutual.]
+# [2. Inspect model, parameter, lower, and upper in summary_table.]
+# [3. Compare abs(replicated_mean - observed) in gof_table.]
+```
+
+# References and provenance
+
+- van den Bos, W., Crone, E. A., Meuwese, R., & Güroğlu, B. (2018).
+  Social network cohesion in school classes promotes prosocial behavior.
+  *PLOS ONE, 13*(4), e0194656. <https://doi.org/10.1371/journal.pone.0194656>.
+  S2 Text provides nomination items; Table 3 and S4 document the regression coding key.
+- van den Bos, W., Crone, E., & Güroğlu, B. *Peer Group Cohesion and Prosocial
+  Behavior* [OSF project]. <https://osf.io/vucwf/>. Recorded license: CC BY 4.0,
+  <https://creativecommons.org/licenses/by/4.0/>. I select group 36 and Q = 1,
+  count a duplicate once, exclude self-pairs, and retain directions rather than
+  using the paper's mutual-only network as the model outcome.
+- Cranmer, S. J., Desmarais, B. A., & Morgan, J. W. (2021). *Inferential Network
+  Analysis*, Chapter 10, "Extending the Latent Space Model," §10.5.
+  Cambridge University Press.
+- Desmarais, B. A. (2026). *Latent Space Models* [Week 10 lecture slides].
+  PLSC 508, Pennsylvania State University, slides 4 and 20–21.
+- Dorff, C., Gallop, M., & Minhas, S. (2020). Networks of violence: Predicting
+  conflict in Nigeria. *The Journal of Politics, 82*(2), 476–493.
+  <https://doi.org/10.1086/706459>, pp. 484–485 for the model components.
+- Hoff, P. D. (2021). Additive and multiplicative effects network models.
+  *Statistical Science, 36*(1), 34–50. <https://doi.org/10.1214/19-STS757>.
+- Minhas, S., Hoff, P. D., & Ward, M. D. (2019). Inferential approaches for
+  network analysis: AMEN for latent factor models. *Political Analysis, 27*(2),
+  208–222. <https://doi.org/10.1017/pan.2018.50>.
+- Hoff, P., Fosdick, B., & Volfovsky, A. (2024). *amen*, version 1.4.5.
+  <https://doi.org/10.32614/CRAN.package.amen>. Function documentation:
+  <https://pdhoff.github.io/amen/reference/ame.html> and
+  <https://pdhoff.github.io/amen/reference/plot.ame.html>.
+- The igraph development team. *igraph: Network Analysis and Visualization*,
+  version 2.3.3 [R package used in the recorded classroom run].
+  <https://CRAN.R-project.org/package=igraph>. Definitions and plotting:
+  <https://r.igraph.org/reference/reciprocity.html>,
+  <https://r.igraph.org/reference/transitivity.html>, and
+  <https://r.igraph.org/reference/plot.igraph.html>. Global transitivity ignores
+  direction; I use it only on the explicit mutual undirected graph.
+- Bürkner, P.-C., Gabry, J., Kay, M., & Vehtari, A. (2026). *posterior: Tools
+  for Working with Posterior Distributions*, version 1.7.0 [R package].
+  <https://mc-stan.org/posterior/>. Diagnostic definitions:
+  <https://mc-stan.org/posterior/reference/rhat.html>,
+  <https://mc-stan.org/posterior/reference/ess_bulk.html>,
+  <https://mc-stan.org/posterior/reference/ess_tail.html>, and
+  <https://mc-stan.org/posterior/reference/mcse_mean.html>.
+- Vehtari, A., Gelman, A., Simpson, D., Carpenter, B., & Bürkner, P.-C. (2021).
+  Rank-normalization, folding, and localization: An improved R-hat for assessing
+  convergence of MCMC (with discussion). *Bayesian Analysis, 16*(2), 667–718.
+  <https://doi.org/10.1214/20-BA1221>.
+
+[The public release contains 584 sender IDs in 21 archive groups and 506
+attribute records, differing from the article's reported recruitment/exclusion
+counts. I do not equate group 36 with a numbered S6 Table row or claim to have
+recovered a complete enrollment census. The original records and four-chain
+checks remain in my separate authoring archive.]
+
+```{r contribution-note, echo=FALSE, results='asis'}
+cat(paste(readLines("PROVENANCE.md", warn = FALSE, encoding = "UTF-8"), collapse = "\n"))
+```
+
+# Session record
+
+```{r session-record}
+dir.create("outputs", showWarnings = FALSE)
+run_stamp <- paste0(format(Sys.time(), "%Y%m%d_%H%M%S"), "_", Sys.getpid())
+run_record <- file.path("outputs", paste0("classroom_run_", run_stamp, ".rds"))
+saveRDS(list(R0 = R0, R0_execution = r0_execution, R0_seeds = seeds0, R0_runtime = runtime0,
+             R2_seeds = preestimated$seeds,
+             R2_file_md5 = unname(tools::md5sum("data/rank2_preestimated.rds")),
+             inputs = list(Y = Y, Xdyad = Xdyad), descriptives = descriptives,
+             summary = summary_table, gof = gof_table,
+             source_md5 = unname(tools::md5sum("Week11_Dutch_AME_Class.Rmd")),
+             session = capture.output(sessionInfo())), run_record)
+cat("I saved my executed classroom record:", run_record, "\n")
+sessionInfo()
+```
