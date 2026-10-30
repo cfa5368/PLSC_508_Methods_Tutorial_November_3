@@ -21,11 +21,11 @@ This is my November 3, 2026 Methods Tutorial for PLSC 508 at Penn State,
 using data from van den Bos et al. (2018).
 
 ## For classmates
-Hello! ( :)
+Hello! 🙂
 1. Download and extract the complete folder to a short path. Open the `.Rproj`
    in the folder that directly contains this README, the Rmd, data, and scripts.
-2. Check the listed packages before class and install only ones that are missing.
-   Do not update an already working installation simply to match a version number.
+2. Check the listed packages before class and install only those that are missing.
+   Don’t update an already working installation just to match a version number.
 3. In Source view, run chunks from the top. The two live rank-zero calls together
    took about 3.6 minutes in the recorded October 29 session. Other machines may
    take longer; RStudio remains busy while a call is running.
