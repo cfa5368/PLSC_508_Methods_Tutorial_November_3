@@ -1,0 +1,132 @@
+{
+  "alternateIdentifiers": [
+    {
+      "alternateIdentifier": "https://osf.io/vucwf",
+      "alternateIdentifierType": "URL"
+    }
+  ],
+  "contributors": [
+    {
+      "contributorName": {
+        "contributorName": "Center for Open Science",
+        "nameType": "Organizational"
+      },
+      "contributorType": "HostingInstitution",
+      "nameIdentifier": {
+        "nameIdentifier": "https://ror.org/05d5mza29",
+        "nameIdentifierScheme": "ROR"
+      }
+    }
+  ],
+  "creators": [
+    {
+      "creatorName": {
+        "creatorName": "Wouter van den Bos",
+        "nameType": "Personal"
+      },
+      "nameIdentifier": {
+        "nameIdentifier": "https://osf.io/67xfb",
+        "nameIdentifierScheme": "URL"
+      }
+    },
+    {
+      "creatorName": {
+        "creatorName": "Eveline Crone",
+        "nameType": "Personal"
+      },
+      "nameIdentifier": {
+        "nameIdentifier": "https://osf.io/h2sx9",
+        "nameIdentifierScheme": "URL"
+      }
+    },
+    {
+      "creatorName": {
+        "creatorName": "Berna Gu\u0308rog\u0306lu",
+        "nameType": "Personal"
+      },
+      "nameIdentifier": {
+        "nameIdentifier": "https://osf.io/rtszm",
+        "nameIdentifierScheme": "URL"
+      }
+    }
+  ],
+  "dates": [
+    {
+      "date": "2017-09-28",
+      "dateType": "Created"
+    },
+    {
+      "date": "2018-02-01",
+      "dateType": "Updated"
+    }
+  ],
+  "descriptions": [
+    {
+      "description": "Adolescence is a key period of social development at the end of which individuals are expected to take on adult social roles. The school class, as the most salient peer group, becomes the prime environment that impacts social development during adolescence. Using social network analyses, we investigated how individual and group level features are related to prosocial and social captial (generalized trust). We mapped the social networks within 22 classrooms (N=611) of adolescents aged between 12 and 18 years, and collected data on social behaviors towards peers. Our results indicate that individuals with high centrality show both higher levels of prosocial behavior and relational aggression. Importantly, greater social cohesion was associated with (1) reduced levels of antisocial behavior towards peers and (2) increased generalized trust. These results provide novel insights in the relationship between social structure and social behavior, and stress the importance of the school environment in the development of not only intellectual but also social capital.",
+      "descriptionType": "Abstract"
+    }
+  ],
+  "fundingReferences": [],
+  "identifier": {
+    "identifier": "https://osf.io/vucwf",
+    "identifierType": "URL"
+  },
+  "publicationYear": "2017",
+  "publisher": "OSF",
+  "relatedIdentifiers": [
+    {
+      "relatedIdentifier": "10.31234/osf.io/adg8t",
+      "relatedIdentifierType": "DOI",
+      "relationType": "IsSupplementTo"
+    }
+  ],
+  "relatedItems": [
+    {
+      "publicationYear": "2017",
+      "publisher": "PsyArXiv",
+      "relatedItemIdentifier": {
+        "relatedItemIdentifier": "10.31234/osf.io/adg8t",
+        "relatedItemIdentifierType": "DOI"
+      },
+      "relatedItemType": "Preprint",
+      "relationType": "IsSupplementTo",
+      "titles": [
+        {
+          "title": "Peer Group Cohesion and Prosocial Behavior"
+        }
+      ]
+    }
+  ],
+  "resourceType": {
+    "resourceType": "Project",
+    "resourceTypeGeneral": "Text"
+  },
+  "rightsList": [
+    {
+      "rights": "CC-By Attribution 4.0 International",
+      "rightsURI": "https://creativecommons.org/licenses/by/4.0/legalcode"
+    }
+  ],
+  "subjects": [
+    {
+      "subject": "adolescence"
+    },
+    {
+      "subject": "prosocial behavior"
+    },
+    {
+      "subject": "social capital"
+    },
+    {
+      "subject": "social networks"
+    },
+    {
+      "subject": "trust"
+    }
+  ],
+  "titles": [
+    {
+      "title": "Peer Group Cohesion and Prosocial Behavior"
+    }
+  ]
+}
