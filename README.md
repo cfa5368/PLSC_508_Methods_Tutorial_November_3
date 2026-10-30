@@ -34,21 +34,20 @@ Hello! 🙂
    rank-two reproduction function during class. Recovery fits are used only if
    the presenter explicitly announces that change of route.
 
-I open `W11_Dutch_Classroom.Rproj`, restart R, and use
+Open `W11_Dutch_Classroom.Rproj`, restart R, and use
 `Week11_Dutch_AME_Class.Rmd` in Source view. The matching HTML contains the
 same lesson and its executed outputs.
 
 ## Before class
 
-I extract the entire folder to a short path. I keep its internal folders intact.
-I check that `amen`, `igraph`, `posterior`, and `knitr` are installed. Rendering
-also requires `rmarkdown` and Pandoc. I arrange missing installations before the
+Extract the entire folder to a short path. Keep its internal folders intact.
+Check that `amen`, `igraph`, `posterior`, and `knitr` are installed. Rendering
+also requires `rmarkdown` and Pandoc. Arrange missing installations before the
 session; the lesson does not install packages or download data.
 
-My earlier estimation used R 4.6.0 and amen 1.4.5. I record the actual versions
+My earlier estimation used R 4.6.0 and amen 1.4.5. Record the actual versions
 in the session record rather than require every participant to upgrade R.
-New versions or another platform can give different numerical behavior; I
-inspect warnings and diagnostics rather than assume compatibility from a version
+New versions or another platform can give different numerical behavior; Inspect warnings and diagnostics rather than assume compatibility from a version
 number alone.
 
 ## What runs
