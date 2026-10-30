@@ -1,4 +1,3 @@
-# Dutch liking networks: my classroom tutorial
 # Understanding classroom relationships with network models
 
 I use this tutorial to explore a simple question: when students nominate
