@@ -364,15 +364,11 @@ flag <- with(summary_table, !is.finite(rhat) | rhat >= 1.01 | bulk_ess < 400 |
 if (any(flag)) warning("I inspect the flagged summaries; I do not change the pair or discard a chain.")
 ```
 
-[R-hat compares split-chain behavior using rank-normalized and folded versions;
-values near one are reassuring but not proof of convergence. Bulk ESS concerns
-central sampling efficiency, and tail ESS concerns the 5% and 95% quantiles.
-These effective sample sizes describe simulation information, not student counts.
-`mcse_over_sd` divides the Monte Carlo standard error of a posterior **mean** by
-posterior SD; it is not uncertainty in the parameter or MCSE of interval endpoints
-(Vehtari et al., 2021; `posterior` documentation). Two chains permit these checks;
-I still inspect traces. `ve` is excluded only after verifying that it is fixed
-at one.]
+[**Sampling check:** R-hat near one and sufficiently large effective sample
+sizes are reassuring, but do not prove convergence. These diagnostics concern
+the saved parameter draws, not the number of students. `mcse_over_sd` measures
+simulation error in a posterior mean relative to its posterior standard
+deviation; I exclude `ve` only after verifying that it is fixed at one.]
 
 
 ```{r coefficients}
@@ -389,26 +385,18 @@ interval_text <- function(model, parameter) {
 }
 ```
 
-[A central 95% credible interval contains the middle 95% of saved parameter
-values, approximating posterior uncertainty under the model and data. The
-matching-sex coefficients are
-`r sprintf("%.3f", value("R = 0", "same_recorded_sex.dyad"))` and
-`r sprintf("%.3f", value("R = 2", "same_recorded_sex.dyad"))`, with intervals
-`r interval_text("R = 0", "same_recorded_sex.dyad")` and
-`r interval_text("R = 2", "same_recorded_sex.dyad")`. Matching recorded categories
-are associated with greater latent nomination propensity conditional on each
-model. This is not a probability-point change or proof of a preference.]
+[**Matching recorded sex:** The coefficients are
+`r sprintf("%.3f", value("R = 0", "same_recorded_sex.dyad"))` for R0 and
+`r sprintf("%.3f", value("R = 2", "same_recorded_sex.dyad"))` for R2.
+Both indicate a positive conditional association between matching recorded
+sex codes and liking nominations, not a percentage-point effect or proof
+of a causal preference.]
 
-[The age-difference estimates are
-`r sprintf("%.3f", value("R = 0", "age_absdiff_years.dyad"))` and
-`r sprintf("%.3f", value("R = 2", "age_absdiff_years.dyad"))` per year of difference,
-with intervals `r interval_text("R = 0", "age_absdiff_years.dyad")` and
-`r interval_text("R = 2", "age_absdiff_years.dyad")`. They include zero, not proof
-that age never matters. Observed differences range only from 0 to
-`r sprintf("%.2f", max(Xdyad[, , "age_absdiff_years"]))` years. Both models fix the
-probit residual variance at one, but condition on different latent structures.
-The larger R2 coefficient is not automatically a doubled probability effect
-or a known rescaling. I do not exponentiate probit coefficients as odds ratios.]
+[**Age difference:** The estimated coefficients are
+`r sprintf("%.3f", value("R = 0", "age_absdiff_years.dyad"))` for R0 and
+`r sprintf("%.3f", value("R = 2", "age_absdiff_years.dyad"))` for R2.
+Both credible intervals include zero, so the association remains uncertain
+in this classroom. These are probit coefficients, not odds ratios.]
 
 ```{r activity-popularity-reciprocity}
 variance_rows <- summary_table$parameter %in% c("va", "vb", "cab", "rho")
@@ -416,32 +404,22 @@ knitr::kable(summary_table[variance_rows, c("model", "parameter", "mean", "lower
              digits = 3, row.names = FALSE, caption = "Sender/receiver components and residual reciprocity")
 ```
 
-[**Activity and popularity:** A random effect is a student-specific latent
-sending or receiving deviation modeled through a shared distribution.
-`va` and `vb` describe heterogeneity in those tendencies after the other terms.
-For R2 their means are `r sprintf("%.3f", value("R = 2", "va"))` and
-`r sprintf("%.3f", value("R = 2", "vb"))`. The larger receiving mean suggests
-more remaining variation in being nominated, but comparing means is not a
-posterior comparison of the variances. These are not observed degree variances.
-The prior supports positive variances, so an interval excluding zero is not by
-itself a test that heterogeneity is present.]
+[**Activity and popularity:** `va` and `vb` measure remaining differences
+in students' latent tendencies to send and receive nominations. For R2,
+their posterior means are `r sprintf("%.3f", value("R = 2", "va"))` and
+`r sprintf("%.3f", value("R = 2", "vb"))`. These are not observed degree
+variances.]
 
-[**Covariance:** `cab` concerns the same student's sending and receiving
-latent deviations. The R0 interval is `r interval_text("R = 0", "cab")` and the
-R2 interval is `r interval_text("R = 2", "cab")`. Negative covariance indicates
-opposite residual sending/receiving tendencies under the model, not a personal
-trait or a causal effect. It is not bounded by -1 and 1; standardizing each saved
-`cab` by `sqrt(va * vb)` would give the corresponding actor correlation.]
+[**Covariance:** `cab` describes the association between the same student's
+latent sending and receiving tendencies. The R2 interval is
+`r interval_text("R = 2", "cab")`, indicating a negative conditional
+association in this model, not a personal trait or causal mechanism.]
 
-[**Residual reciprocity:** `rho` is the conditional correlation of opposite-direction
-latent errors, not the observed reciprocated-tie share. The R0 interval is
-`r interval_text("R = 0", "rho")`; the R2 interval is
-`r interval_text("R = 2", "rho")`. R2 is broad, asymmetric, and includes zero;
-its positive mean alone is not a precise finding about residual reciprocity.
-The update caps `abs(rho)` at 0.995. In the two saved R2 chains, 78 of 16,000
-retained values equal +0.995 (about 0.49%). Those are saved-state counts, not
-acceptance rates. They document boundary behavior but do not identify the
-uncapped posterior or prove that the boundary explains the uncertainty.]
+[**Residual reciprocity:** `rho` measures the remaining association
+between opposite-direction latent errors, not the observed reciprocated-tie
+fraction. Its R2 interval is `r interval_text("R = 2", "rho")`, which
+includes zero. The installed sampler also has a boundary at 0.995;
+the model's residual reciprocity remains uncertain.]
 
 ## Step 5: Visualize the multiplicative effects
 
@@ -490,14 +468,12 @@ legend("bottomleft", legend = key_text, pch = c(21, 22), pt.bg = sex_colors,
        bty = "n", cex = .75)
 ```
 
-[In this chain's **mean-product summary**, the first singular value is about
-28.93 and the second about 0.69. Factor 2 is displayed with an expanded scale
-so it is visible; this is not evidence that the fitted rank-two model is really
-rank one. Averaging rank-two products can produce a matrix of higher rank, so
-the displayed product is only an approximation to `UVPM`. Both recorded codes
-appear on each side of Factor 1; that does not establish independence from sex
-or identify the factors as sex. The sociogram and these plots represent different
-objects, and none of these axes establishes an individual trait or mechanism.]
+[**Factor interpretation:** In this chain's mean-product summary, the
+first singular value is approximately 28.93 and the second approximately
+0.69, so the first component dominates this displayed summary.
+This does not mean the fitted model is rank one or that the axes identify
+measured personality traits. The factor plots represent model-based
+sending and receiving patterns, not the sociogram's layout positions.]
 
 ## Step 6: Check all five network features
 
@@ -558,40 +534,35 @@ gof_value <- function(model, statistic, column) {
 }
 ```
 
-[`rep_ge_obs` is the share of saved replicated statistics at least as large as
-the observed value. For `trans.dep`, these shares are
-`r sprintf("%.1f", 100 * gof_value("R = 0", "trans.dep", "rep_ge_obs"))`% under R0
-and `r sprintf("%.1f", 100 * gof_value("R = 2", "trans.dep", "rep_ge_obs"))`% under R2.
-R2's replicated means are also closer for outgoing-rate variation, dyadic
-association, and cycle dependence. R0's mean is slightly closer for incoming-rate
-variation. All five observations fall inside both central intervals, but that
-alone does not establish adequate fit. These are selected, in-sample checks,
-not frequentist significance tests, held-out accuracy, an optimal-rank test,
-or causal evidence. The same-sex and age predictors and latent structure can
-all contribute to replicated network patterns.]
+[**Predictive fit:** All five observed statistics fall within both models'
+central 95% predictive intervals, but coverage alone does not establish
+good fit. For `trans.dep`, approximately
+`r sprintf("%.1f", 100 * gof_value("R = 0", "trans.dep", "rep_ge_obs"))`%
+of R0 replications and
+`r sprintf("%.1f", 100 * gof_value("R = 2", "trans.dep", "rep_ge_obs"))`%
+of R2 replications reach the observed value, suggesting that R2 better
+reproduces this particular feature. R2 is not closer for every feature;
+these are in-sample descriptive comparisons, not causal findings or
+formal model-selection results.]
 
 # Connect the results to classroom cohesion
 
-The paper represents cohesion using mutual-network density, diameter, and
-clusters (p. 3). My directed graph retains one-way reports as well:
-`r 2 * mutual_pairs` of its `r n_ties` nominations belong to `r mutual_pairs`
-mutual pairs. Applying the paper's mutual rule gives density
-`r sprintf("%.3f", mutual_density)` rather than
-`r sprintf("%.3f", igraph::edge_density(g, loops = FALSE))`, and global
-transitivity `r sprintf("%.3f", mutual_transitivity)`.
+Van den Bos et al. (2018, p. 3) measure cohesion using mutual liking,
+whereas my directed network also retains one-way nominations.
 
-[Student 1040 sends `r out_degree["1040"]` nominations and receives
-`r in_degree["1040"]`. That student remains in both graphs but is an isolate
-only in the mutual graph. The mutual construction removes the nine one-way
-nominations; the directed model retains them as observations. They are not
-attributable to the sender effect alone.]
-
-[**Developmental connection:** Directed and mutual measures reveal different
-aspects of adolescents' relational opportunities. These liking reports do not
-establish whether student 1040 lacks support, resources, or relationships outside
-this classroom. Reciprocated and closed patterns are consistent with local
-cohesion, but do not establish uniform cohesion or a causal effect on cooperation.
-This application models neither prosocial behavior nor trust.]
+[**What these results suggest about cohesion:** In group 36,
+`r 2 * mutual_pairs` of `r n_ties` directed nominations are reciprocated
+(`r sprintf("%.1f", 100 * reciprocated_fraction)`%), and
+`r n_closed_paths` of `r n_two_paths` directed two-paths are closed
+(`r sprintf("%.1f", 100 * directed_transitivity)`%), suggesting
+substantial mutuality and local closure among the recorded classroom ties.
+Requiring mutual nominations reduces density from
+`r sprintf("%.3f", igraph::edge_density(g, loops = FALSE))` to
+`r sprintf("%.3f", mutual_density)`, showing that many nominations are
+one-way, including the nine sent by student 1040.
+These patterns are consistent with some local cohesion, but they do not
+establish how this classroom compares with other classrooms or whether
+cohesion causes helping, trust, or supportive relationships.]
 
 # Try it yourself
 

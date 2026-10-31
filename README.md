@@ -1,3 +1,4 @@
+# Dutch liking networks: my classroom tutorial
 # Understanding classroom relationships with network models
 
 I use this tutorial to explore a simple question: when students nominate
@@ -20,11 +21,11 @@ This is my November 3, 2026 Methods Tutorial for PLSC 508 at Penn State,
 using data from van den Bos et al. (2018).
 
 ## For classmates
-Hello! 🙂
+Hello! ( :)
 1. Download and extract the complete folder to a short path. Open the `.Rproj`
    in the folder that directly contains this README, the Rmd, data, and scripts.
-2. Check the listed packages before class and install only those that are missing.
-   Don’t update an already working installation just to match a version number.
+2. Check the listed packages before class and install only ones that are missing.
+   Do not update an already working installation simply to match a version number.
 3. In Source view, run chunks from the top. The two live rank-zero calls together
    took about 3.6 minutes in the recorded October 29 session. Other machines may
    take longer; RStudio remains busy while a call is running.
@@ -34,20 +35,21 @@ Hello! 🙂
    rank-two reproduction function during class. Recovery fits are used only if
    the presenter explicitly announces that change of route.
 
-Open `W11_Dutch_Classroom.Rproj`, restart R, and use
+I open `W11_Dutch_Classroom.Rproj`, restart R, and use
 `Week11_Dutch_AME_Class.Rmd` in Source view. The matching HTML contains the
 same lesson and its executed outputs.
 
 ## Before class
 
-Extract the entire folder to a short path. Keep its internal folders intact.
-Check that `amen`, `igraph`, `posterior`, and `knitr` are installed. Rendering
-also requires `rmarkdown` and Pandoc. Arrange missing installations before the
+I extract the entire folder to a short path. I keep its internal folders intact.
+I check that `amen`, `igraph`, `posterior`, and `knitr` are installed. Rendering
+also requires `rmarkdown` and Pandoc. I arrange missing installations before the
 session; the lesson does not install packages or download data.
 
-My earlier estimation used R 4.6.0 and amen 1.4.5. Record the actual versions
+My earlier estimation used R 4.6.0 and amen 1.4.5. I record the actual versions
 in the session record rather than require every participant to upgrade R.
-New versions or another platform can give different numerical behavior; Inspect warnings and diagnostics rather than assume compatibility from a version
+New versions or another platform can give different numerical behavior; I
+inspect warnings and diagnostics rather than assume compatibility from a version
 number alone.
 
 ## What runs
